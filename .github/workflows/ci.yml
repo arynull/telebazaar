@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check src/
+      - run: ruff format --check src/
+
+  install-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Clean install from source
+        run: |
+          python -m venv /tmp/ci-venv
+          /tmp/ci-venv/bin/pip install --quiet .
+          /tmp/ci-venv/bin/telebazaar --version
+      - name: CLI smoke test (init / catalog / orders)
+        run: |
+          export TELEBAZAAR_DATA_DIR="$(mktemp -d)"
+          TB=/tmp/ci-venv/bin/telebazaar
+          $TB init
+          $TB doctor
+          $TB catalog add --sku WIDGET-1 --name "Test Widget" --price 1500 --currency XTR --stock 10
+          $TB catalog list | grep -q WIDGET-1
+          $TB catalog set-stock WIDGET-1 5
+          ORDER_ID="$($TB orders create --customer 123456 --sku WIDGET-1 --qty 2)"
+          test -n "$ORDER_ID"
+          $TB orders show "$ORDER_ID" | grep -q pending_payment
+          # stock must be decremented by the reservation
+          $TB catalog show WIDGET-1 | grep -q '"stock": 3'
+          # illegal transition must be rejected (exit 1)
+          if $TB orders ship "$ORDER_ID" >/dev/null 2>&1; then
+            echo "illegal transition was not rejected"; exit 1
+          fi
+          $TB orders pay "$ORDER_ID"
+          $TB orders ship "$ORDER_ID"
+          $TB orders show "$ORDER_ID" | grep -q shipped
+          echo "smoke OK"

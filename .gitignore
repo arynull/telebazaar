@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# local runtime data
+data/
+*.db
+*.db-journal
+
+# internal ops files (local only, never committed)
+MISSION.md
+SPEC.md
+RUNBOOK.md
+PROGRESS.md
+ERROR_LOG.md
+RESEARCH.md
+prompts/
+
+# secrets / env
+.env
+.telegram.env
+
+# tests stay local-only
+tests/
+
+# scratch
+*.log
+.DS_Store
+.aider*

@@ -1,0 +1,27 @@
+[project]
+name = "telebazaar"
+version = "0.1.0"
+description = "Self-hosted shop for Telegram"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">= 3.12"
+
+[project.scripts]
+telebazaar = "telebazaar.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# Declared lint standard (v0.1.0). Pinned explicitly so CI stays
+# reproducible regardless of ruff's shifting default rule set.
+# BLE (blind-except) and S110/S112 are intentionally not enabled:
+# the bot/CLI uses defensive probing try/excepts by design.
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
