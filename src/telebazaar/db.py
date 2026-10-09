@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 
 def connect(data_dir) -> sqlite3.Connection:
@@ -46,6 +46,23 @@ def migrate(conn: sqlite3.Connection) -> None:
         "CREATE TABLE IF NOT EXISTS events("
         "id INTEGER PRIMARY KEY, kind TEXT NOT NULL, ref_id TEXT DEFAULT '', "
         "payload_json TEXT DEFAULT '{}', created_at TEXT)"
+    )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(customers)").fetchall()}
+    if "stage" not in cols:
+        conn.execute("ALTER TABLE customers ADD COLUMN stage TEXT DEFAULT 'new'")
+    if "tags" not in cols:
+        conn.execute("ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT ''")
+    if "updated_at" not in cols:
+        conn.execute("ALTER TABLE customers ADD COLUMN updated_at TEXT")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS customer_notes("
+        "id INTEGER PRIMARY KEY, tg_id INTEGER NOT NULL, note TEXT NOT NULL, "
+        "created_at TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS segments("
+        "name TEXT PRIMARY KEY, tag TEXT DEFAULT '', stage TEXT DEFAULT '', "
+        "created_at TEXT)"
     )
     conn.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', ?)",
