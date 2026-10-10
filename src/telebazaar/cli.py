@@ -23,6 +23,15 @@ def _err(msg) -> int:
     print(f"error: {msg}", file=sys.stderr)
     return 1
 
+def _positive_int(value: str) -> int:
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}")
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer: {value!r}")
+    return n
+
 
 def cmd_init(args) -> int:
     d = config_mod.ensure_dirs()
@@ -163,14 +172,18 @@ def cmd_orders_show(args) -> int:
 
 
 def cmd_orders_list(args) -> int:
+    limit = getattr(args, "limit", None)
     conn = _conn()
     if args.status:
-        cur = conn.execute(
-            "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC",
-            (args.status,),
-        )
+        sql = "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC"
+        params = (args.status,)
     else:
-        cur = conn.execute("SELECT * FROM orders ORDER BY created_at DESC")
+        sql = "SELECT * FROM orders ORDER BY created_at DESC"
+        params = ()
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = (*params, limit)
+    cur = conn.execute(sql, params)
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     for r in rows:
@@ -250,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_orders_show)
     a = osub.add_parser("list")
     a.add_argument("--status", default="")
+    a.add_argument("--limit", type=_positive_int, default=None)
     a.set_defaults(func=cmd_orders_list)
     a = osub.add_parser("pay")
     a.add_argument("id")
