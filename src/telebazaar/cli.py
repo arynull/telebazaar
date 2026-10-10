@@ -23,13 +23,16 @@ def _err(msg) -> int:
     print(f"error: {msg}", file=sys.stderr)
     return 1
 
+
 def _positive_int(value: str) -> int:
     try:
         n = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}")
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from None
     if n <= 0:
-        raise argparse.ArgumentTypeError(f"must be a positive integer: {value!r}")
+        raise argparse.ArgumentTypeError(
+            f"must be a positive integer: {value!r}"
+        ) from None
     return n
 
 
