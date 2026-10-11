@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from telebazaar import __version__
+from telebazaar import analytics as analytics_mod
 from telebazaar import broadcast as broadcast_mod
 from telebazaar import config as config_mod
 from telebazaar import db as db_mod
@@ -325,6 +326,41 @@ def _transition_cmd(order_id, to) -> int:
     return 0
 
 
+def cmd_analytics_summary(args) -> int:
+    conn = _conn()
+    data = analytics_mod.summary(conn)
+    conn.close()
+    print(json.dumps(data, indent=2))
+    return 0
+
+
+def cmd_analytics_top_products(args) -> int:
+    conn = _conn()
+    rows = analytics_mod.top_products(conn, limit=args.limit)
+    conn.close()
+    for r in rows:
+        print(f"{r['sku']} {r['qty']} {r['revenue_minor']} {r['name']}")
+    return 0
+
+
+def cmd_analytics_revenue(args) -> int:
+    conn = _conn()
+    rows = analytics_mod.revenue(conn, by=args.by, buckets=args.buckets)
+    conn.close()
+    for r in rows:
+        print(f"{r['bucket']} {r['revenue_minor']}")
+    return 0
+
+
+def cmd_analytics_repeat(args) -> int:
+    conn = _conn()
+    rows = analytics_mod.repeat(conn)
+    conn.close()
+    for r in rows:
+        print(f"{r['tg_id']} {r['orders']} {r['total_spent_minor']}")
+    return 0
+
+
 def cmd_broadcast(args) -> int:
     conn = _conn()
     try:
@@ -436,6 +472,19 @@ def build_parser() -> argparse.ArgumentParser:
     a = osub.add_parser("cancel")
     a.add_argument("id")
     a.set_defaults(func=lambda ns: _transition_cmd(ns.id, "cancelled"))
+    sp = sub.add_parser("analytics")
+    asub = sp.add_subparsers(dest="analytics_cmd", required=True)
+    a = asub.add_parser("summary")
+    a.set_defaults(func=cmd_analytics_summary)
+    a = asub.add_parser("top-products")
+    a.add_argument("--limit", type=_positive_int, default=5)
+    a.set_defaults(func=cmd_analytics_top_products)
+    a = asub.add_parser("revenue")
+    a.add_argument("--by", choices=("day", "week"), default="day")
+    a.add_argument("--buckets", type=_positive_int, default=14)
+    a.set_defaults(func=cmd_analytics_revenue)
+    a = asub.add_parser("repeat")
+    a.set_defaults(func=cmd_analytics_repeat)
     sp = sub.add_parser("customers")
     csub = sp.add_subparsers(dest="customers_cmd", required=True)
     a = csub.add_parser("list")

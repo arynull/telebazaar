@@ -371,6 +371,16 @@ def _normalize_tags(tags) -> list:
     return out
 
 
+def list_orders(conn, limit=None) -> list:
+    sql = "SELECT * FROM orders ORDER BY created_at"
+    params: list = []
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    cur = conn.execute(sql, tuple(params))
+    return [_dict(r) for r in cur.fetchall()]
+
+
 def _require_customer(conn, tg_id) -> dict:
     tg_id = int(tg_id)
     cur = conn.execute("SELECT * FROM customers WHERE tg_id=?", (tg_id,))
