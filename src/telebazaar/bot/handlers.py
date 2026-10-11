@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 
+from telebazaar import broadcast as broadcast_mod
 from telebazaar import store as store_mod
 
 log = logging.getLogger("telebazaar.bot")
@@ -98,6 +99,8 @@ class Handlers:
                 self.api.send_message(chat_id, "Usage: /order <id>")
                 return
             self._cmd_order(chat_id, user, parts[1].strip())
+        elif cmd == "/broadcast":
+            self._cmd_broadcast(chat_id, user, text)
 
     def _cmd_shop(self, chat_id, user) -> None:
         if user:
@@ -188,6 +191,30 @@ class Handlers:
             return
         lines = [f"{r['id']} — {r['status']} — {r['total_minor']}" for r in rows]
         self.api.send_message(chat_id, "\n".join(lines))
+
+    def _cmd_broadcast(self, chat_id, user, text: str) -> None:
+        try:
+            uid = int(user.get("id"))
+        except Exception:
+            self.api.send_message(chat_id, "not authorized")
+            return
+        if not self._is_merchant(uid):
+            self.api.send_message(chat_id, "not authorized")
+            return
+        parts = text.split()
+        if len(parts) < 3:
+            self.api.send_message(chat_id, "Usage: /broadcast <segment> <text>")
+            return
+        segment = parts[1]
+        body = " ".join(parts[2:])
+        try:
+            seg = store_mod.get_segment(self.conn, segment)
+        except KeyError:
+            self.api.send_message(chat_id, f"Segment not found: {segment}")
+            return
+        members = seg["members"]
+        sent, failed = broadcast_mod.broadcast(self.conn, self.api, members, body)
+        self.api.send_message(chat_id, f"Broadcast sent: SENT {sent}/FAILED {failed}")
 
     def _cmd_order(self, chat_id, user, order_id: str) -> None:
         try:

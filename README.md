@@ -68,6 +68,7 @@ Merchants (ids in `TELEBAZAAR_MERCHANT_IDS`):
 
 - `/orders` — open orders (pending payment / paid)
 - `/order <id>` — order detail with Ship / Cancel buttons
+- `/broadcast <segment> <text>` — send a message to every member of a segment
 
 Checkout sends a Telegram invoice (Stars: currency `XTR`, empty provider
 token, one price item). The bot answers the pre-checkout query only when the
@@ -92,6 +93,7 @@ telebazaar orders list [--status STATUS]
 telebazaar orders pay ID
 telebazaar orders ship ID
 telebazaar orders cancel ID
+telebazaar broadcast --segment NAME --text TEXT (--dry | --yes)
 telebazaar bot run
 ```
 

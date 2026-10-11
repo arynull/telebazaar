@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from telebazaar import __version__
+from telebazaar import broadcast as broadcast_mod
 from telebazaar import config as config_mod
 from telebazaar import db as db_mod
 from telebazaar import store as store_mod
@@ -324,6 +325,46 @@ def _transition_cmd(order_id, to) -> int:
     return 0
 
 
+def cmd_broadcast(args) -> int:
+    conn = _conn()
+    try:
+        seg = store_mod.get_segment(conn, args.segment)
+    except KeyError as e:
+        conn.close()
+        return _err(e)
+    members = seg["members"]
+    if args.dry:
+        print(f"DRY {len(members)} recipients")
+        for m in members:
+            print(f"{m['tg_id']} {m['name']} {m['stage']} {m['tags']}")
+        conn.close()
+        return 0
+    if not args.yes:
+        print(
+            f"segment {args.segment}: {len(members)} recipients; "
+            "re-run with --dry or --yes",
+            file=sys.stderr,
+        )
+        conn.close()
+        return 2
+    cfg = config_mod.load_config()
+    token = config_mod.get_token(cfg)
+    if not token:
+        conn.close()
+        print(
+            "error: bot token missing. Set TELEBAZAAR_BOT_TOKEN or config.toml",
+            file=sys.stderr,
+        )
+        return 2
+    from telebazaar.bot.api import BotAPI
+
+    api = BotAPI(token)
+    sent, failed = broadcast_mod.broadcast(conn, api, members, args.text)
+    conn.close()
+    print(f"SENT {sent}/FAILED {failed}")
+    return 0
+
+
 def cmd_bot_run(args) -> int:
     cfg = config_mod.load_config()
     token = config_mod.get_token(cfg)
@@ -434,6 +475,12 @@ def build_parser() -> argparse.ArgumentParser:
     a = ssub.add_parser("show")
     a.add_argument("name")
     a.set_defaults(func=cmd_customers_segment_show)
+    sp = sub.add_parser("broadcast")
+    sp.add_argument("--segment", required=True)
+    sp.add_argument("--text", required=True)
+    sp.add_argument("--dry", action="store_true")
+    sp.add_argument("--yes", action="store_true")
+    sp.set_defaults(func=cmd_broadcast)
     sp = sub.add_parser("bot")
     bsub = sp.add_subparsers(dest="bot_cmd", required=True)
     a = bsub.add_parser("run")
