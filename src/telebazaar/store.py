@@ -19,6 +19,9 @@ LEGAL = {
 }
 
 
+STAGES = ("new", "active", "vip", "dormant", "blocked")
+
+
 class IllegalTransition(Exception):
     pass
 
@@ -354,3 +357,172 @@ def mark_paid_by_payload(conn, payload, charge_id, total_amount, currency) -> di
     log_event(conn, "order_paid", oid, {"charge_id": charge_id or ""})
     conn.commit()
     return get_order(conn, oid)
+
+
+def _normalize_tags(tags) -> list:
+    if tags is None:
+        return []
+    parts = tags.split(",") if isinstance(tags, str) else tags
+    out = []
+    for t in parts:
+        t = str(t).strip()
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
+def _require_customer(conn, tg_id) -> dict:
+    tg_id = int(tg_id)
+    cur = conn.execute("SELECT * FROM customers WHERE tg_id=?", (tg_id,))
+    row = cur.fetchone()
+    if row is None:
+        raise KeyError(f"unknown customer: {tg_id}")
+    return _dict(row)
+
+
+def list_customers(conn, stage=None, tag=None, limit=None) -> list:
+    sql = "SELECT * FROM customers"
+    conds = []
+    params: list = []
+    if stage:
+        conds.append("stage=?")
+        params.append(stage)
+    if tag:
+        conds.append("(',' || tags || ',') LIKE ?")
+        params.append(f"%,{tag},%")
+    if conds:
+        sql = sql + " WHERE " + " AND ".join(conds)
+    sql = sql + " ORDER BY tg_id"
+    if limit is not None:
+        sql = sql + " LIMIT ?"
+        params.append(int(limit))
+    cur = conn.execute(sql, tuple(params))
+    return [_dict(r) for r in cur.fetchall()]
+
+
+def get_customer_profile(conn, tg_id) -> dict:
+    prof = _require_customer(conn, tg_id)
+    cur = conn.execute(
+        "SELECT COUNT(*) AS c, COALESCE(SUM(total_minor), 0) AS t"
+        " FROM orders WHERE customer_tg_id=?",
+        (int(tg_id),),
+    )
+    agg = cur.fetchone()
+    prof["order_count"] = int(agg["c"])
+    prof["total_spent_minor"] = int(agg["t"])
+    prof["notes"] = list_customer_notes(conn, tg_id)
+    return prof
+
+
+def set_customer_stage(conn, tg_id, stage) -> dict:
+    _require_customer(conn, tg_id)
+    if stage not in STAGES:
+        raise ValueError(f"invalid stage: {stage}")
+    tg_id = int(tg_id)
+    conn.execute(
+        "UPDATE customers SET stage=?, updated_at=? WHERE tg_id=?",
+        (stage, _now(), tg_id),
+    )
+    log_event(conn, "customer_stage_set", str(tg_id), {"stage": stage})
+    conn.commit()
+    return get_customer_profile(conn, tg_id)
+
+
+def tag_customer(conn, tg_id, add=None, remove=None) -> dict:
+    _require_customer(conn, tg_id)
+    tg_id = int(tg_id)
+    cur = conn.execute("SELECT tags FROM customers WHERE tg_id=?", (tg_id,))
+    tags = _normalize_tags(cur.fetchone()["tags"])
+    add_tags = _normalize_tags(add)
+    remove_tags = set(_normalize_tags(remove))
+    for t in add_tags:
+        if t not in tags:
+            tags.append(t)
+    if remove_tags:
+        tags = [t for t in tags if t not in remove_tags]
+    conn.execute(
+        "UPDATE customers SET tags=?, updated_at=? WHERE tg_id=?",
+        (",".join(tags), _now(), tg_id),
+    )
+    log_event(
+        conn,
+        "customer_tagged",
+        str(tg_id),
+        {"add": add_tags, "remove": sorted(remove_tags)},
+    )
+    conn.commit()
+    return _require_customer(conn, tg_id)
+
+
+def add_customer_note(conn, tg_id, text) -> dict:
+    tg_id = int(tg_id)
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("note text required")
+    _require_customer(conn, tg_id)
+    cur = conn.execute(
+        "INSERT INTO customer_notes(tg_id, note, created_at) VALUES(?,?,?)",
+        (tg_id, text, _now()),
+    )
+    note_id = int(cur.lastrowid)
+    log_event(conn, "customer_note_added", str(tg_id), {"note": text})
+    conn.commit()
+    return {"id": note_id, "tg_id": tg_id, "note": text}
+
+
+def list_customer_notes(conn, tg_id, limit=None) -> list:
+    sql = "SELECT * FROM customer_notes WHERE tg_id=? ORDER BY id DESC"
+    params: list = [int(tg_id)]
+    if limit is not None:
+        sql = sql + " LIMIT ?"
+        params.append(int(limit))
+    cur = conn.execute(sql, tuple(params))
+    return [_dict(r) for r in cur.fetchall()]
+
+
+def _segment_members(conn, seg) -> list:
+    return list_customers(
+        conn,
+        stage=seg.get("stage") or None,
+        tag=seg.get("tag") or None,
+    )
+
+
+def create_segment(conn, name, tag="", stage="") -> dict:
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("segment name required")
+    if stage and stage not in STAGES:
+        raise ValueError(f"invalid stage: {stage}")
+    cur = conn.execute("SELECT name FROM segments WHERE name=?", (name,))
+    if cur.fetchone():
+        raise ValueError(f"duplicate segment: {name}")
+    conn.execute(
+        "INSERT INTO segments(name, tag, stage, created_at) VALUES(?,?,?,?)",
+        (name, tag or "", stage or "", _now()),
+    )
+    log_event(conn, "segment_created", name, {"tag": tag or "", "stage": stage or ""})
+    conn.commit()
+    return get_segment(conn, name)
+
+
+def list_segments(conn) -> list:
+    cur = conn.execute("SELECT * FROM segments ORDER BY name")
+    out = []
+    for r in cur.fetchall():
+        seg = _dict(r)
+        seg["member_count"] = len(_segment_members(conn, seg))
+        out.append(seg)
+    return out
+
+
+def get_segment(conn, name) -> dict:
+    cur = conn.execute("SELECT * FROM segments WHERE name=?", (name,))
+    row = cur.fetchone()
+    if row is None:
+        raise KeyError(f"unknown segment: {name}")
+    seg = _dict(row)
+    members = _segment_members(conn, seg)
+    seg["member_count"] = len(members)
+    seg["members"] = members
+    return seg

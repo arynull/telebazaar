@@ -195,6 +195,123 @@ def cmd_orders_list(args) -> int:
     return 0
 
 
+def cmd_customers_list(args) -> int:
+    conn = _conn()
+    rows = store_mod.list_customers(
+        conn,
+        stage=args.stage or None,
+        tag=args.tag or None,
+        limit=args.limit,
+    )
+    conn.close()
+    for r in rows:
+        print(f"{r['tg_id']} {r['name']} {r['stage']} {r['tags']}")
+    return 0
+
+
+def cmd_customers_show(args) -> int:
+    conn = _conn()
+    try:
+        prof = store_mod.get_customer_profile(conn, int(args.tg_id))
+    except (ValueError, KeyError) as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(json.dumps(prof, indent=2))
+    return 0
+
+
+def cmd_customers_set_stage(args) -> int:
+    if args.stage not in store_mod.STAGES:
+        print(f"error: invalid stage: {args.stage}", file=sys.stderr)
+        return 2
+    conn = _conn()
+    try:
+        store_mod.set_customer_stage(conn, int(args.tg_id), args.stage)
+    except (ValueError, KeyError) as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(args.stage, file=sys.stderr)
+    return 0
+
+
+def cmd_customers_tag(args) -> int:
+    conn = _conn()
+    try:
+        row = store_mod.tag_customer(
+            conn,
+            int(args.tg_id),
+            add=args.add or [],
+            remove=args.remove or [],
+        )
+    except (ValueError, KeyError) as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(row["tags"], file=sys.stderr)
+    return 0
+
+
+def cmd_customers_note(args) -> int:
+    conn = _conn()
+    try:
+        note = store_mod.add_customer_note(conn, int(args.tg_id), args.text)
+    except (ValueError, KeyError) as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(f"note #{note['id']}", file=sys.stderr)
+    return 0
+
+
+def cmd_customers_notes(args) -> int:
+    conn = _conn()
+    rows = store_mod.list_customer_notes(conn, int(args.tg_id), limit=args.limit)
+    conn.close()
+    for n in rows:
+        print(f"{n['id']} {n['created_at']} {n['note']}")
+    return 0
+
+
+def cmd_customers_segment_create(args) -> int:
+    if args.stage and args.stage not in store_mod.STAGES:
+        print(f"error: invalid stage: {args.stage}", file=sys.stderr)
+        return 2
+    conn = _conn()
+    try:
+        seg = store_mod.create_segment(
+            conn, args.name, tag=args.tag or "", stage=args.stage or ""
+        )
+    except (ValueError, KeyError) as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(f"created {seg['name']}", file=sys.stderr)
+    return 0
+
+
+def cmd_customers_segment_list(args) -> int:
+    conn = _conn()
+    segs = store_mod.list_segments(conn)
+    conn.close()
+    for s in segs:
+        print(f"{s['name']} {s['tag']} {s['stage']} {s['member_count']}")
+    return 0
+
+
+def cmd_customers_segment_show(args) -> int:
+    conn = _conn()
+    try:
+        seg = store_mod.get_segment(conn, args.name)
+    except KeyError as e:
+        conn.close()
+        return _err(e)
+    conn.close()
+    print(json.dumps(seg, indent=2))
+    return 0
+
+
 def _transition_cmd(order_id, to) -> int:
     conn = _conn()
     try:
@@ -278,6 +395,45 @@ def build_parser() -> argparse.ArgumentParser:
     a = osub.add_parser("cancel")
     a.add_argument("id")
     a.set_defaults(func=lambda ns: _transition_cmd(ns.id, "cancelled"))
+    sp = sub.add_parser("customers")
+    csub = sp.add_subparsers(dest="customers_cmd", required=True)
+    a = csub.add_parser("list")
+    a.add_argument("--stage", default="")
+    a.add_argument("--tag", default="")
+    a.add_argument("--limit", type=_positive_int, default=None)
+    a.set_defaults(func=cmd_customers_list)
+    a = csub.add_parser("show")
+    a.add_argument("tg_id")
+    a.set_defaults(func=cmd_customers_show)
+    a = csub.add_parser("set-stage")
+    a.add_argument("tg_id")
+    a.add_argument("stage")
+    a.set_defaults(func=cmd_customers_set_stage)
+    a = csub.add_parser("tag")
+    a.add_argument("tg_id")
+    a.add_argument("--add", action="append", default=[])
+    a.add_argument("--remove", action="append", default=[])
+    a.set_defaults(func=cmd_customers_tag)
+    a = csub.add_parser("note")
+    a.add_argument("tg_id")
+    a.add_argument("text")
+    a.set_defaults(func=cmd_customers_note)
+    a = csub.add_parser("notes")
+    a.add_argument("tg_id")
+    a.add_argument("--limit", type=_positive_int, default=None)
+    a.set_defaults(func=cmd_customers_notes)
+    seg = csub.add_parser("segment")
+    ssub = seg.add_subparsers(dest="segment_cmd", required=True)
+    a = ssub.add_parser("create")
+    a.add_argument("name")
+    a.add_argument("--tag", default="")
+    a.add_argument("--stage", default="")
+    a.set_defaults(func=cmd_customers_segment_create)
+    a = ssub.add_parser("list")
+    a.set_defaults(func=cmd_customers_segment_list)
+    a = ssub.add_parser("show")
+    a.add_argument("name")
+    a.set_defaults(func=cmd_customers_segment_show)
     sp = sub.add_parser("bot")
     bsub = sp.add_subparsers(dest="bot_cmd", required=True)
     a = bsub.add_parser("run")
