@@ -30,3 +30,4 @@ prompts/
 *.log
 .DS_Store
 .aider*
+uv.lock
