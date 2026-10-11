@@ -1,6 +1,6 @@
 [project]
 name = "telebazaar"
-version = "0.2.1"
+version = "0.3.0"
 description = "Self-hosted shop for Telegram"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,3 +25,10 @@ line-length = 88
 # BLE (blind-except) and S110/S112 are intentionally not enabled:
 # the bot/CLI uses defensive probing try/excepts by design.
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
