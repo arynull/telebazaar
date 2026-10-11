@@ -1,6 +1,6 @@
 [project]
 name = "telebazaar"
-version = "0.2.0"
+version = "0.2.1"
 description = "Self-hosted shop for Telegram"
 readme = "README.md"
 license = {text = "MIT"}

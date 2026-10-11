@@ -20,7 +20,11 @@ class BotAPI:
             url, data=body, headers={"Content-Type": "application/json"}
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            # URL is built from a fixed https://api.telegram.org base (see
+            # __init__), never from user input, so urllib is safe here.
+            with urllib.request.urlopen(  # nosec B310
+                req, timeout=15
+            ) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raw = b""
@@ -114,7 +118,8 @@ class BotAPI:
         payload,
         currency,
         prices,
-        provider_token="",
+        # Empty default forces explicit config; this is not a credential.
+        provider_token="",  # nosec
     ):
         return self._post(
             "sendInvoice",

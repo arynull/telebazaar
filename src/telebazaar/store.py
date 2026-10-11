@@ -109,7 +109,12 @@ def update_product(conn, sku, **fields) -> dict:
     if not sets:
         return get_product(conn, sku)
     vals.append(sku)
-    conn.execute(f"UPDATE products SET {', '.join(sets)} WHERE sku=?", vals)
+    # Column names are checked against ALLOWED_UPDATE_FIELDS above and every
+    # value is passed as a bound parameter, so this f-string is not injectable.
+    conn.execute(
+        f"UPDATE products SET {', '.join(sets)} WHERE sku=?",  # nosec
+        vals,
+    )
     log_event(conn, "product_updated", sku, {"fields": sorted(fields.keys())})
     conn.commit()
     return get_product(conn, sku)

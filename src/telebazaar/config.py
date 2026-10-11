@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
+from types import ModuleType
 
+tomllib: ModuleType | None
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -48,9 +50,10 @@ def _parse_merchant_ids(value) -> list:
 
 def load_config() -> dict:
     d = data_dir()
-    cfg = {"bot_token": "", "merchant_ids": [], "data_dir": str(d)}
+    # Empty default forces explicit config; this is not a credential.
+    cfg = {"bot_token": "", "merchant_ids": [], "data_dir": str(d)}  # nosec
     path = d / "config.toml"
-    file_data = {}
+    file_data: dict = {}
     if path.is_file() and tomllib is not None:
         try:
             with open(path, "rb") as f:
@@ -58,11 +61,9 @@ def load_config() -> dict:
         except Exception:
             file_data = {}
     if isinstance(file_data, dict):
-        nested = (
-            file_data.get("telebazaar")
-            if isinstance(file_data.get("telebazaar"), dict)
-            else {}
-        )
+        nested = file_data.get("telebazaar")
+        if not isinstance(nested, dict):
+            nested = {}
         token = file_data.get("bot_token", nested.get("bot_token", ""))
         mids = file_data.get("merchant_ids", nested.get("merchant_ids", []))
         if isinstance(token, str):

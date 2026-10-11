@@ -44,7 +44,7 @@ def run_bot(token, data_dir, merchant_ids) -> int:
         signal.signal(signal.SIGINT, _sig)
         signal.signal(signal.SIGTERM, _sig)
     except Exception:
-        pass
+        log.debug("signal handlers unavailable on this platform; continuing")
     conn = db_mod.connect(data_dir)
     db_mod.migrate(conn)
     api = BotAPI(token)

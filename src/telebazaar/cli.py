@@ -177,6 +177,7 @@ def cmd_orders_show(args) -> int:
 def cmd_orders_list(args) -> int:
     limit = getattr(args, "limit", None)
     conn = _conn()
+    params: tuple
     if args.status:
         sql = "SELECT * FROM orders WHERE status=? ORDER BY created_at DESC"
         params = (args.status,)

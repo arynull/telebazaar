@@ -48,7 +48,7 @@ class Handlers:
                 if chat_id is not None:
                     self.api.send_message(chat_id, "Something went wrong. Try again.")
             except Exception:
-                pass
+                log.debug("fallback error notice failed; best-effort, ignoring")
 
     def _extract_chat_id(self, update):
         try:
@@ -238,8 +238,9 @@ class Handlers:
                 self.api.answer_callback_query(cb_id, text="Added \u2705")
             elif data == "cart:clear":
                 with contextlib.suppress(Exception):
-                    tg_id = int(user.get("id"))
-                    store_mod.cart_clear(self.conn, tg_id)
+                    raw_id = user.get("id")
+                    if raw_id is not None:
+                        store_mod.cart_clear(self.conn, int(raw_id))
                 self.api.answer_callback_query(cb_id, text="Cleared")
             elif data == "checkout":
                 self._do_checkout(cb_id, chat_id, user)
@@ -303,7 +304,8 @@ class Handlers:
             payload=f"tb:{oid}",
             currency=currency,
             prices=[{"label": f"Order {oid}", "amount": total}],
-            provider_token="",
+            # Empty default forces explicit config; this is not a credential.
+            provider_token="",  # nosec
         )
         self.api.send_message(
             chat_id, "Invoice sent \u2014 complete payment in Telegram"
